@@ -604,106 +604,74 @@ namespace esphome
         
             float heat_tgt_temp = 16.1111f;
             float cool_tgt_temp = 26.6667f;
-            static const int UART_BUF_SIZE = 128;
+            static const int UART_BUF_SIZE = 256;    // 128 was not enough, >151
             uint8_t uart_buf[UART_BUF_SIZE];
 
             int get_response(const uint8_t input, uint8_t *out)
             {
                 static std::vector<uint8_t> msg_buffer;
-                static uint16_t checksum = 0;
                 static bool in_message = false;
-                static int expected_msg_size = 0;
 
-                if (DEBUG_LOGGING) ESP_LOGD("aircon_climate", "get_response: input=0x%02X, in_message=%d, buffer_size=%zu", input, in_message, msg_buffer.size());
-
+                // If we are not inside the message, we are waiting for the start marker 0xF4
                 if (!in_message) {
                     if (input == 0xF4) {
-                        if (DEBUG_LOGGING) ESP_LOGD("aircon_climate", "Starting new message with F4");
                         msg_buffer.clear();
                         msg_buffer.push_back(input);
-                        checksum = 0;
-                        expected_msg_size = 0;
                         in_message = true;
-                        // Response is starting, stop waiting for ACK
+                        
                         if (send_state == WAITING_ACK) {
                             send_state = IDLE;
-                            if (DEBUG_LOGGING) ESP_LOGD("aircon_climate", "Setting send_state to IDLE as response started");
                         }
-                    } else {
-                        if (DEBUG_LOGGING) ESP_LOGD("aircon_climate", "Ignoring byte 0x%02X, waiting for F4", input);
                     }
                     return 0;
-                } else {
-                    // Handle byte stuffing: skip the stuffed F4
-                    if (input == 0xF4 && !msg_buffer.empty() && msg_buffer.back() == 0xF4) {
-                        if (DEBUG_LOGGING) ESP_LOGD("aircon_climate", "Skipping stuffed F4");
-                        return 0; // Skip adding to buffer
+                } 
+                
+                // We are inside the message
+                // Byte-stuffing processing: if the second F4 comes in a row, ignore his double
+                if (input == 0xF4 && !msg_buffer.empty() && msg_buffer.back() == 0xF4 && msg_buffer.size() > 1) {
+                    if (DEBUG_LOGGING) ESP_LOGD("aircon_climate", "Skipping stuffed F4");
+                    // Temporarily do nothing, do not add a double to the buffer
+                    // But the air conditioner Hisense doubles F4 inside the data.
+                    // In order not to break the logic of the end of the package, just miss this byte.
+                    return 0; 
+                }
+
+                msg_buffer.push_back(input);
+                size_t idx = msg_buffer.size() - 1;
+
+                // Check the completion of the package by markers F4 FB at the very end
+                if (idx >= 5 && msg_buffer[idx] == 0xFB && msg_buffer[idx - 1] == 0xF4) {
+                    size_t msg_size = msg_buffer.size();
+                    
+                    if (DEBUG_LOGGING) {
+                        ESP_LOGD("aircon_climate", "Packet finished by F4 FB marker. Total bytes: %zu", msg_size);
                     }
 
-                    msg_buffer.push_back(input);
-                    size_t idx = msg_buffer.size() - 1;
-                    const uint8_t expected[16] = {0xF4,0xF5,0x01,0x40,0x49,0x01,0x00,0xFE,0x01,0x01,0x01,0x01,0x00,0x66,0x00,0x01};
-                    if (idx >= 2 && idx < expected_msg_size - 4) {
-                        checksum += msg_buffer[idx];
-                        if (DEBUG_LOGGING) ESP_LOGD("aircon_climate", "Checksum add: 0x%02X, current checksum: %d", msg_buffer[idx], checksum);
+                    // Check if the accepted package will fit in the output buffer of the driver
+                    if (msg_size > UART_BUF_SIZE) {
+                        ESP_LOGE("aircon_climate", "Received packet is too large for UART_BUF_SIZE: %zu", msg_size);
+                        in_message = false;
+                        msg_buffer.clear();
+                        return 0;
                     }
-                    if (idx < 16) {
-                        if (msg_buffer[idx] != expected[idx]) {
-                            ESP_LOGE("aircon_climate", "Header mismatch at byte %zu: expected %02X, got %02X", idx, expected[idx], msg_buffer[idx]);
-                            in_message = false;
-                            msg_buffer.clear();
-                            return 0;
-                        } else {
-                            if (DEBUG_LOGGING) ESP_LOGD("aircon_climate", "Header byte %zu matches: 0x%02X", idx, msg_buffer[idx]);
-                        }
-                        if (idx == 4) {
-                            expected_msg_size = sizeof(Device_Status);
-                            if (DEBUG_LOGGING) ESP_LOGD("aircon_climate", "Expected message size: %d", expected_msg_size);
-                            if (expected_msg_size > UART_BUF_SIZE) {
-                                ESP_LOGE("aircon_climate", "Message size too large: %d", expected_msg_size);
-                                in_message = false;
-                                msg_buffer.clear();
-                                return 0;
-                            }
-                        }
-                    } else {
-                        if (idx == expected_msg_size - 3) {
-                            uint16_t rxd_checksum = (msg_buffer[expected_msg_size - 4] << 8) | msg_buffer[expected_msg_size - 3];
-                            if (DEBUG_LOGGING) ESP_LOGD("aircon_climate", "CRC check: computed %d, received %d", checksum, rxd_checksum);
-                            if (checksum != rxd_checksum) {
-                                ESP_LOGE("aircon_climate", "CRC check failed. Computed: %d Received: %d", checksum, rxd_checksum);
-                                in_message = false;
-                                msg_buffer.clear();
-                                return 0;
-                            }
-                        } else if (idx == expected_msg_size - 2) {
-                            if (DEBUG_LOGGING) ESP_LOGD("aircon_climate", "Checking frame end F4: 0x%02X", msg_buffer[idx]);
-                            if (msg_buffer[idx] != 0xF4) {
-                                ESP_LOGE("aircon_climate", "Frame end F4 mismatch");
-                                in_message = false;
-                                msg_buffer.clear();
-                                return 0;
-                            }
-                        } else if (idx == expected_msg_size - 1) {
-                            if (DEBUG_LOGGING) ESP_LOGD("aircon_climate", "Checking frame end FB: 0x%02X", msg_buffer[idx]);
-                            if (msg_buffer[idx] != 0xFB) {
-                                ESP_LOGE("aircon_climate", "Frame end FB mismatch");
-                                in_message = false;
-                                msg_buffer.clear();
-                                return 0;
-                            } else {
-                                size_t msg_size = msg_buffer.size();
-                                ESP_LOGD("aircon_climate", "Received %zu bytes.", msg_buffer.size());
-                                memcpy(out, msg_buffer.data(), msg_size);
-                                in_message = false;
-                                msg_buffer.clear();
-                                return msg_size;
-                            }
-                        }
-                    }
-                    return 0;
+
+                    // Copy data for structure parsing
+                    memcpy(out, msg_buffer.data(), msg_size);
+                    in_message = false;
+                    msg_buffer.clear();
+                    return msg_size; // Return the real size of the resulting package
                 }
+
+                // Protection against buffer overflow (if the package is stuck or markers lost)
+                if (msg_buffer.size() >= UART_BUF_SIZE) {
+                    ESP_LOGE("aircon_climate", "Buffer overflow protection triggered, clearing buffer.");
+                    in_message = false;
+                    msg_buffer.clear();
+                }
+
+                return 0;
             }
+
 
             // Non-blocking message sending with queue and timeout
             void send_message(const std::string& desc, const std::vector<uint8_t>& msg)
