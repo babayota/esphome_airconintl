@@ -1,9 +1,9 @@
 esphome:
-  name: garage-ac
-  friendly_name: garage_ac
+  name: conditioner
+  friendly_name: Conditioner
 
 external_components:
-  - source: github://pslawinski/esphome_airconintl@packaging
+  - source: github://babayota/esphome_airconintl@packaging
 
 uart:
   tx_pin: 1
@@ -13,10 +13,12 @@ uart:
 
 climate:
   - platform: airconintl
-    name: "Garage AC"
-    temperature_unit: "F"
-    re_pin: GPIO12
-    de_pin: GPIO13
+    name: "conditioner"
+    temperature_unit: "C"
+    de_pin: GPIO5
+    uart_id: ac_uart
+#    re_pin: GPIO12
+#    de_pin: GPIO13
     compressor_frequency:
       name: "Compressor Frequency"
     compressor_frequency_setting:
@@ -43,7 +45,7 @@ switch:
     name: "AC controller restart"
 
 esp8266:
-  board: esp01_1m
+  board: d1_mini
 
 # Enable logging
 logger:
@@ -52,22 +54,23 @@ logger:
   
 # Enable Home Assistant API
 api:
-  encryption:
-    key: "1582jQcjZD+C7vt193Cq8MAnVHaQTZKp/PlPveW22Z0="
+#  encryption:
+#    key: "1582jQcjZD+C7vt193Cq8MAnVHaQTZKp/PlPveW22Z0="
 
 ota:
   - platform: esphome
-    password: "4b75164a7040a860a6cb59266d9dcd9e"
+#    password: "4b75164a7040a860a6cb59266d9dcd9e"
 
 wifi:
   ssid: !secret wifi_ssid
   password: !secret wifi_password
   fast_connect: true
-  use_address: 10.0.0.51
+  min_auth_mode: WPA2
+#  use_address: 10.0.0.51
 
   # Enable fallback hotspot (captive portal) in case wifi connection fails
   ap:
-    ssid: "Garage-Ac Fallback Hotspot"
-    password: "pLWgQiIbKX2w"
+    ssid: "Conditioner"
+#    password: "pLWgQiIbKX2w"
 
 captive_portal:
