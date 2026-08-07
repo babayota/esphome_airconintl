@@ -311,8 +311,23 @@ namespace esphome
                 set_sensor(compressor_exhaust_temperature, ((Device_Status *)uart_buf)->compressor_exhaust_temperature);
                 set_sensor(target_exhaust_temperature, ((Device_Status *)uart_buf)->target_exhaust_temperature);
                 set_sensor(indoor_pipe_temperature, ((Device_Status *)uart_buf)->indoor_pipe_temperature);
-                set_sensor(indoor_humidity_setting, ((Device_Status *)uart_buf)->indoor_humidity_setting);
-                set_sensor(indoor_humidity_status, ((Device_Status *)uart_buf)->indoor_humidity_status);
+                // set_sensor(indoor_humidity_setting, ((Device_Status *)uart_buf)->indoor_humidity_setting);
+                // set_sensor(indoor_humidity_status, ((Device_Status *)uart_buf)->indoor_humidity_status);
+                // Фільтрація відсутнього датчика вологості (-128)
+                int8_t humid_set = ((Device_Status *)uart_buf)->indoor_humidity_setting;
+                int8_t humid_stat = ((Device_Status *)uart_buf)->indoor_humidity_status;
+
+                if (humid_set == -128 || humid_set == (int8_t)0x80) {
+                    if (indoor_humidity_setting != nullptr) indoor_humidity_setting->publish_state(NAN);
+                } else {
+                    set_sensor(indoor_humidity_setting, humid_set);
+                }
+
+                if (humid_stat == -128 || humid_stat == (int8_t)0x80) {
+                    if (indoor_humidity_status != nullptr) indoor_humidity_status->publish_state(NAN);
+                } else {
+                    set_sensor(indoor_humidity_status, humid_stat);
+                }
             }
 
             void control(const ClimateCall &call) override
@@ -534,7 +549,7 @@ namespace esphome
             {
                 // The capabilities of the climate device
                 auto traits = climate::ClimateTraits();
-                traits.set_supports_current_temperature(true);
+                // traits.set_supports_current_temperature(true); //deleted in new version of ESPHome
                 traits.set_visual_min_temperature(16);
                 traits.set_visual_max_temperature(32);
                 traits.set_visual_temperature_step(1);
@@ -559,7 +574,7 @@ namespace esphome
                 traits.set_supported_presets({climate::CLIMATE_PRESET_NONE,
                                               climate::CLIMATE_PRESET_BOOST,
                                               climate::CLIMATE_PRESET_ECO});
-                traits.set_supports_action(true);
+                // traits.set_supports_action(true); //deleted in new version of ESPHome
                 return traits;
             }
 
