@@ -149,21 +149,11 @@ namespace esphome
                             ((Device_Status *)uart_buf)->left_right,
                             ((Device_Status *)uart_buf)->up_down);
 
-                        // Some AEH-W4A1 units report indoor_temperature_setting/status in
-                        // Fahrenheit, others already in Celsius. Use the same temperature_unit
-                        // flag that already controls which command templates (C or F) are sent,
-                        // so both variants are handled correctly.
-                        float tgt_temp, curr_temp;
-                        if (temperature_unit == "F")
-                        {
-                            tgt_temp = (((Device_Status *)uart_buf)->indoor_temperature_setting - 32) * 0.5556f;
-                            curr_temp = (((Device_Status *)uart_buf)->indoor_temperature_status - 32) * 0.5556f;
-                        }
-                        else
-                        {
-                            tgt_temp = ((Device_Status *)uart_buf)->indoor_temperature_setting;
-                            curr_temp = ((Device_Status *)uart_buf)->indoor_temperature_status;
-                        }
+                        // Force unit to Fahrenheit mode for command payloads, but read Celsius directly
+                        this->temperature_unit = "F";
+
+                        float tgt_temp = ((Device_Status *)uart_buf)->indoor_temperature_setting;
+                        float curr_temp = ((Device_Status *)uart_buf)->indoor_temperature_status;
 
                         if (tgt_temp > 7 && tgt_temp < 33)
                             target_temperature = tgt_temp;
