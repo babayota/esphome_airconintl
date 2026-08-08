@@ -149,9 +149,9 @@ namespace esphome
                             ((Device_Status *)uart_buf)->left_right,
                             ((Device_Status *)uart_buf)->up_down);
 
-                        // Convert temperatures to celsius
-                        float tgt_temp = (((Device_Status *)uart_buf)->indoor_temperature_setting - 32) * 0.5556f;
-                        float curr_temp = (((Device_Status *)uart_buf)->indoor_temperature_status - 32) * 0.5556f;
+                        // Convert temperatures to celsius (fixed swapped current/target values)
+                        float tgt_temp = (((Device_Status *)uart_buf)->indoor_temperature_status - 32) * 0.5556f;
+                        float curr_temp = (((Device_Status *)uart_buf)->indoor_temperature_setting - 32) * 0.5556f;
 
                         if (tgt_temp > 7 && tgt_temp < 33)
                             target_temperature = tgt_temp;
