@@ -713,14 +713,15 @@ namespace esphome
                     sensor->publish_state(value);
             }
             
-            // Set the temperature (Direct Celsius mapping)
+            // Set the temperature
             void set_temp(float temp)
             {
                 uint8_t temp_c = roundf(temp);
                 if (temp_c >= 16 && temp_c <= 32)
                 {
                     int index = temp_c - 16;
-                    std::vector<uint8_t> msg(temp_c_messages[index], temp_c_messages[index] + sizeof(temp_16_C));
+                    // Гарантоване копіювання всіх 50 байтів масиву, включаючи 0xFB
+                    std::vector<uint8_t> msg(temp_c_messages[index], temp_c_messages[index] + 50);
                     snprintf(desc_buffer, sizeof(desc_buffer), "Set Temperature to %d°C", temp_c);
                     ESP_LOGD("aircon_climate", "Enqueuing %s", desc_buffer);
                     send_message(desc_buffer, msg);
