@@ -150,7 +150,7 @@ namespace esphome
                             ((Device_Status *)uart_buf)->up_down);
 
                         // Force unit to Fahrenheit mode for command payloads, but read Celsius directly
-                        this->temperature_unit = "F";
+                        this->temperature_unit = "C";
 
                         float tgt_temp = ((Device_Status *)uart_buf)->indoor_temperature_setting;
                         float curr_temp = ((Device_Status *)uart_buf)->indoor_temperature_status;
@@ -608,7 +608,7 @@ namespace esphome
             std::string current_desc;
             std::queue<Message> message_queue;
             char desc_buffer[64];
-            std::string temperature_unit = "F";
+            std::string temperature_unit = "C";
             const uint8_t* temp_f_messages[26] = {
                 temp_61_F, temp_62_F, temp_63_F, temp_64_F, temp_65_F, temp_66_F, temp_67_F, temp_68_F, temp_69_F, temp_70_F,
                 temp_71_F, temp_72_F, temp_73_F, temp_74_F, temp_75_F, temp_76_F, temp_77_F, temp_78_F, temp_79_F, temp_80_F,
@@ -716,16 +716,30 @@ namespace esphome
             // Set the temperature
             void set_temp(float temp)
             {
-                // Примусово використовуємо Цельсій для вибору c_messages
-                uint8_t temp_c = roundf(temp);
-                if (temp_c >= 16 && temp_c <= 32)
+                if (temperature_unit == "C")
                 {
-                    int index = temp_c - 16;
-                    // Передаємо всі 50 байтів (з урахуванням кінцевого 0xFB)
-                    std::vector<uint8_t> msg(temp_c_messages[index], temp_c_messages[index] + 50);
-                    snprintf(desc_buffer, sizeof(desc_buffer), "Set Temperature to %d°C", temp_c);
-                    ESP_LOGD("aircon_climate", "Enqueuing %s", desc_buffer);
-                    send_message(desc_buffer, msg);
+                    uint8_t temp_c = roundf(temp);
+                    if (temp_c >= 16 && temp_c <= 32)
+                    {
+                        int index = temp_c - 16;
+                        // Передаємо всі 50 байтів масиву (з кінцевим 0xFB)
+                        std::vector<uint8_t> msg(temp_c_messages[index], temp_c_messages[index] + 50);
+                        snprintf(desc_buffer, sizeof(desc_buffer), "Set Temperature to %d°C", temp_c);
+                        ESP_LOGD("aircon_climate", "Enqueuing %s", desc_buffer);
+                        send_message(desc_buffer, msg);
+                    }
+                }
+                else
+                {
+                    uint8_t temp_f = roundf(temp * 1.8f + 32);
+                    if (temp_f >= 61 && temp_f <= 86)
+                    {
+                        int index = temp_f - 61;
+                        std::vector<uint8_t> msg(temp_f_messages[index], temp_f_messages[index] + 50);
+                        snprintf(desc_buffer, sizeof(desc_buffer), "Set Temperature to %d°F", temp_f);
+                        ESP_LOGD("aircon_climate", "Enqueuing %s", desc_buffer);
+                        send_message(desc_buffer, msg);
+                    }
                 }
             }
         };
